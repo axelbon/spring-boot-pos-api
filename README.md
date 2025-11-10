@@ -35,5 +35,10 @@ Antes de escribir una sola línea de código, se definió una especificación co
 * [ ] **V2.0:** Módulo de reportes avanzados y manejo de devoluciones (Cancelaciones con restauración de stock).
 * [ ] **Futuro:** Sistema dinámico de permisos desacoplados de los roles.
 
+## 🤝 Guías de Desarrollo & Contribución
+Para mantener la consistencia y calidad del código, seguimos estándares estrictos de desarrollo.
+
+* **[Guía de Convenciones y Commits](./docs/CONVENTIONS.md):** Referencia obligatoria para el formato de mensajes de commit y flujo de trabajo.
+
 ---
 *Desarrollado por @axelbon - 2025*
