@@ -1458,6 +1458,7 @@ EMPTY
 * **Descripcion:** Endpoint para anadir un supplier nuevo a la base de datos.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la creación.
 * **Request body:**
     ```json
     {
@@ -1505,12 +1506,16 @@ EMPTY
         - Si no, responder con error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
     2. Validar si supplier no existe en base de datos utilizando el identificador `name`
         - Si existe responde con error `409 Conflict` definido en `Request response`.
-    3. Crear nuevo supplier en la base de datos.
-    4. Responder con mensaje `201 Created` definido en `Request response`.
+    3. Iniciar transaction db.
+    4. Crear nuevo supplier en la base de datos.
+    5. Crear registro en Audit_Log(action=CREATE, supplier_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    6. Hacer commit de la transaccion.
+    7. Responder con mensaje `201 Created` definido en `Request response`.
 #### `PUT /api/supplier/{supplier_id}`
 * **Descripcion:** Endpoint para editar datos de un supplier especifico con el `supplier_id` proporcionado en path variables.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la actualización.
 * **Request body:**
     ```json
     {
@@ -1568,12 +1573,16 @@ EMPTY
         - Si no, responder con error `404 Not found` definido en `Request response`.
     3. Validar si el nuevo `name` especificado en `Request body` existe en la base de datos (`SELECT * FROM supplier WHERE name = ? AND id != ?`).
         - Si si existe, responder con error `409 Conflict` definido en `Request response`.
-    4. Actualizar objeto obtenido de consulta anterior y guardarlo con los datos editados.
-    5. Responder con mensaje `200 Successfull` definido en `Request response`.
+    4. Iniciar transaction db.
+    5. Actualizar objeto obtenido de consulta anterior y guardarlo con los datos editados.
+    6. Crear objeto de Audit_Log(action=UPDATE, supplier_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    7. Hacer commit de transaction.
+    8. Responder con mensaje `200 Successfull` definido en `Request response`.
 #### `DELETE /api/supplier/{supplier_id}`
 * **Descripcion:** Endpoint para eliminar un supplier en especifico con el `supplier_id` proporcionado, esta accion solo la puede hacer un `ADMIN` o `SUPER_ADMIN`
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": Obligatorio razon de la eliminacion.
 * **Request body:**
 EMPTY
 * **Query parameters:**
@@ -1603,7 +1612,15 @@ EMPTY
         - Si no, responder con error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
     2. Validar que supplier exista y que no este "eliminado" con `deleted_at!=null` en la base de datos.
         - Si no, responder con error `404 Not found` definido en `Request response`.
-    3. "Eliminar" supplier de base de datos y responder con mensaje `200 Successfull` definido en `Request response`.
+    3. Validar que la razon este incluida y que sea menor de 100 caracteres.
+    - Si no, responder con error `400 Bad Request` definido en `Estructuras de Respuesta Comunes`.
+        - si no existe: `[ { "field": "X-Audit-Reason", "issue": "Header is required for delete operations" } ]`.
+        - si excede la longitud: `[ { "field": "X-Audit-Reason", "issue": "Reason must be 100 characters or less" } ]`.
+    4. Iniciar transaction db.
+    5. "Eliminar" supplier de base de datos.
+    6. Crear objeto de Audit_Log(action=DELETE, supplier_id=id, auditor_id=jwt_id, reason=header_reason).
+    7. Hacer commit de transaction.
+    8. responder con mensaje `200 Successfull` definido en `Request response`.
 
 #### **CATEGORY**
 #### `GET /api/category`
