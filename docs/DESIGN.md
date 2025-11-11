@@ -1817,7 +1817,7 @@ EMPTY
 * **Descripcion:** Endpoint para eliminar un category en especifico con el `category_id` proporcionado, esta accion solo la puede hacer un `ADMIN` o `SUPER_ADMIN`
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
-"X-AUDIT-REASON": ""
+"X-AUDIT-REASON": Obligatorio razon de la eliminacion.
 * **Request body:**
 EMPTY
 * **Query parameters:**
