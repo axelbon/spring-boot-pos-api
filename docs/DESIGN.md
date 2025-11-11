@@ -1746,8 +1746,11 @@ EMPTY
         - Si no, responder con error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
     2. Validar si category no existe en base de datos utilizando el identificador `name`
         - Si existe responde con error `409 Conflict` definido en `Request response`.
-    3. Crear nuevo category en la base de datos.
-    4. Responder con mensaje `201 Created` definido en `Request response`.
+    3. Iniciar transaction db.
+    4. Crear nueva category.
+    5. Crear registro en Audit_Log(action=CREATE, category_id=id,auditor_id=jwt_id).
+    6. Hacer commit de la transaction.
+    7. Responder con mensaje `201 Created` definido en `Request response`.
 #### `PUT /api/category/{category_id}`
 * **Descripcion:** Endpoint para editar datos de un category especifico con el `category_id` proporcionado en path variables.
 * **Headers:**
@@ -1803,12 +1806,16 @@ EMPTY
         - Si no, responder con error `404 Not found` definido en `Request response`.
     3. Validar si el nuevo `name` especificado en `Request body` existe en la base de datos (`SELECT * FROM category WHERE name = ? AND id != ?`).
         - Si si existe, responder con error `409 Conflict` definido en `Request response`.
-    4. Actualizar objeto obtenido de consulta anterior y guardarlo con los datos editados.
-    5. Responder con mensaje `200 Successfull` definido en `Request response`.
+    4. Iniciar transaction db.
+    5. Actualizar objeto obtenido de consulta anterior y guardarlo con los datos editados.
+    6. Crear objeto de Audit_Log(action=UPDATE, category_id=id, auditor_id=jwt_id).
+    7. Hacer commit de transaction.
+    8. Responder con mensaje `200 Successfull` definido en `Request response`.
 #### `DELETE /api/category/{category_id}`
 * **Descripcion:** Endpoint para eliminar un category en especifico con el `category_id` proporcionado, esta accion solo la puede hacer un `ADMIN` o `SUPER_ADMIN`
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-DELETE-REASON": ""
 * **Request body:**
 EMPTY
 * **Query parameters:**
@@ -1846,8 +1853,16 @@ EMPTY
     2. Validar que category exista y que no este "eliminado" con `deleted_at!=null` en la base de datos.
         - Si no, responder con error `404 Not found` definido en `Request response`.
     3. Validar si category no esta asignado en productos.
-        - Si si esta, responder con erro `409 Conflict` definido en `Request response`.
-    4. "Eliminar" category de base de datos y responder con mensaje `200 Successfull` definido en `Request response`.
+        - Si si esta, responder con error `409 Conflict` definido en `Request response`.
+    4. Validar que la razon este incluida y que sea menor de 100 caracteres.
+        - Si no, responder con error `400 Bad Request` definido en `Estructuras de Respuesta Comunes`.
+            - si no existe: `[ { "field": "X-Audit-Reason", "issue": "Header is required for delete operations" } ]`.
+            - si excede la longitud: `[ { "field": "X-Audit-Reason", "issue": "Reason must be 100 characters or less" } ]`.
+    5. Iniciar transaction db.
+    6. "Eliminar" category de base de datos.
+    7. Crear objeto de Audit_Log(action=DELETE, category_id=id, auditor_id=jwt_id, reason=header_reason).
+    8. Hacer commit de transaction.
+    9. responder con mensaje `200 Successfull` definido en `Request response`.
 
 #### Modulo de Transacciones y Ventas
 #### `POST /api/sale`
