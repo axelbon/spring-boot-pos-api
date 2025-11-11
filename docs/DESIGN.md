@@ -102,7 +102,7 @@ Esto es una primera version que seguira creciendo con el tiempo, por ahora solo 
 ### Desarrollo
 
 #### Entidades
-
+```json
 User(
     id Long pk,
     name varchar(255) NOT NULL,
@@ -112,7 +112,6 @@ User(
     updated_at timestamp,
     deleted_at timestamp
 )
-
 Role(
     int Long PK,
     name varchar(255) NOT NULL UNIQUE,
@@ -185,7 +184,7 @@ Sale(
     deleted_at timestamp
 )
 
-SaleDetail(
+Sale_Detail(
     id Long PK,
     sale_id Long FK NOT NULL,
     product_id Long FK NOT NULL,
@@ -197,6 +196,21 @@ SaleDetail(
     deleted_at timestamp
 )
 
+Audit_Log(
+    id Long PK,
+    auditor_id Long FK NOT NULL "Id del usuario que realizo la accion",
+    reason varchar(100),
+    action ENUM(CREATION, UPDATE, DELETE),
+    created_at timestamp NOT NULL,
+
+    -- Claves foráneas de la entidad afectada (Solo una debe estar llena) --
+    category_id Long FK NULLABLE,
+    product_id Long FK NULLABLE,
+    supplier_id Long FK NULLABLE,
+    user_id Long FK NULLABLE "Id del usuario al que se aplica una accion",
+    role_id Long FK NULLABLE"Id del Rol al que se aplica una accion"
+)
+```
 #### Estructuras de Respuesta Comunes
 
 * **Error de Validación (400 Bad Request)**
@@ -2251,6 +2265,7 @@ EMPTY
     - `CREATE UNIQUE INDEX unique_name_active ON category (name) WHERE deleted_at IS NULL;`
 ### Puntos importantes
 - Si se usa un filtro cualquiera que sea busqueda unica responder con error 404
+- Se implementará una entidad de auditoría `Audit_Log` para llevar un registro de las acciones comunes en la base de datos(CREACIÓN, ACTUALIZACIÓN, ELIMINACIÓN) centralizad para complementar el `SoftDelete`.
 
 NUMERIC(12, 2) se traduce a BigDecimal en java
 ### Out of scope
