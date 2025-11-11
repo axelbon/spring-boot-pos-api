@@ -102,7 +102,7 @@ Esto es una primera version que seguira creciendo con el tiempo, por ahora solo 
 ### Desarrollo
 
 #### Entidades
-
+```json
 User(
     id Long pk,
     name varchar(255) NOT NULL,
@@ -112,7 +112,6 @@ User(
     updated_at timestamp,
     deleted_at timestamp
 )
-
 Role(
     int Long PK,
     name varchar(255) NOT NULL UNIQUE,
@@ -185,7 +184,7 @@ Sale(
     deleted_at timestamp
 )
 
-SaleDetail(
+Sale_Detail(
     id Long PK,
     sale_id Long FK NOT NULL,
     product_id Long FK NOT NULL,
@@ -197,6 +196,21 @@ SaleDetail(
     deleted_at timestamp
 )
 
+Audit_Log(
+    id Long PK,
+    auditor_id Long FK NOT NULL "Id del usuario que realizo la accion",
+    reason varchar(100),
+    action ENUM(CREATION, UPDATE, DELETE),
+    created_at timestamp NOT NULL,
+
+    -- Claves foráneas de la entidad afectada (Solo una debe estar llena) --
+    category_id Long FK NULLABLE,
+    product_id Long FK NULLABLE,
+    supplier_id Long FK NULLABLE,
+    user_id Long FK NULLABLE "Id del usuario al que se aplica una accion",
+    role_id Long FK NULLABLE"Id del Rol al que se aplica una accion"
+)
+```
 #### Estructuras de Respuesta Comunes
 
 * **Error de Validación (400 Bad Request)**
@@ -284,7 +298,8 @@ SaleDetail(
 #### `POST /api/auth/register`
 * **Descripcion:** Endpoint para el registro de usuarios nuevos con un "Super user" con rol `SUPER_ADMIN`.
 * **Headers:**
-    "Authorization" : Bearer {JWT_TOKEN}
+"Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la actualización.
 * **Request body:**
         ```json
         {
@@ -357,8 +372,9 @@ SaleDetail(
     8. Crear objeto de usuario
     9. Crear objeto de User_Role
     10. Guardar usuario y User_Role en DB
-    11. `COMMIT` transaction DB.
-    12. Devolver mensaje de usuario creado `201 Exito` definido en `Request response`.
+    11. Crear objeto de Audit_Log(action=CREATE, user_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    12. `COMMIT` transaction DB.
+    13. Devolver mensaje de usuario creado `201 Exito` definido en `Request response`.
 #### `POST /api/auth/login`
 * **Descripcion:** Endpoint para el inicio de sesion de los usuarios.
 * **Request body:**
@@ -502,6 +518,7 @@ SaleDetail(
 * **Descripcion:** Endpoint para editar datos de un usuario especifico con el `user_id` proporcionado en path variables, un usuario puede editar sus datos `nombe`, `email` y `password`. Pero un `SUPER_ADMIN` puede cambiar todo eso incluyendo el `role_id` en la entidad `User_Role`.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la actualización.
 * **Request body:**
     * **Body de `SUPER_ADMIN`**
     ```json
@@ -567,22 +584,25 @@ SaleDetail(
             * `password`: no debe ser vacio, debe tener 8 caracteres minimo, debe tener 1 caracter especial minimo, debe tener 1 numero minimo, debe tener 1 mayuscula minimo.
             * `role_id`: no debe ser vacio(esta bien no incluirlo), debe ser numero entero
 * **Funcionamiento:**
-        - validaciones de dto
-            - Si hay un problema enviar error `Ejemplo: Input validation error` definido en `Request response`.
-        1. Validar que el usuario autenticado sea el mismo que el `user_id` en los Path variables.
-        2. Validar si el usuario autenticado no es el mismo validar que sea un `ADMIN` o `SUPER_ADMIN`, si no, enviar error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
-        3. Validar si el usuario existe en la base de datos. Si no, enviar error `404 Not found` definido en `Request response`.
-        4. Validar si el usuario autenticado es `ADMIN` validar que el usuario a editar no sea un `SUPER_ADMIN`, si no, enviar error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
-        5. Si el Request body incluye `role_id` validar que el usuario sea `SUPER_ADMIN`, si no, enviar error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
-        6. Validar si el email incluid en request body no existe en la base de datos con una consulta como esta `SELECT * FROM users WHERE email = ? AND id != ?`.
-        7. Si la validacion de email es positiva(si existe), enviar error `409 Conflict` definido en `Request response`.
-        8. Construir nuevo objeto de usuario con los valores nuevo.
-        9. Guardar usuario editado en la base de datos.
-        10. Responde con mesaje `200 Successfull` definido en `Request response`
+    - validaciones de dto
+        - Si hay un problema enviar error `Ejemplo: Input validation error` definido en `Request response`.
+    1. Validar que el usuario autenticado sea el mismo que el `user_id` en los Path variables.
+    2. Validar si el usuario autenticado no es el mismo validar que sea un `ADMIN` o `SUPER_ADMIN`, si no, enviar error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
+    3. Validar si el usuario existe en la base de datos. Si no, enviar error `404 Not found` definido en `Request response`.
+    4. Validar si el usuario autenticado es `ADMIN` validar que el usuario a editar no sea un `SUPER_ADMIN`, si no, enviar error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
+    5. Si el Request body incluye `role_id` validar que el usuario sea `SUPER_ADMIN`, si no, enviar error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
+    6. Validar si el email incluid en request body no existe en la base de datos con una consulta como esta `SELECT * FROM users WHERE email = ? AND id != ?`.
+    7. Si la validacion de email es positiva(si existe), enviar error `409 Conflict` definido en `Request response`.
+    8. Construir nuevo objeto de usuario con los valores nuevo.
+    9. Iniciar transaction db.
+    10. Guardar usuario editado en la base de datos.
+    11. Crear objeto de Audit_Log(action=UPDATE, user_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    10. Responde con mesaje `200 Successfull` definido en `Request response`
 #### `DELETE /api/user/{user_id}`
 * **Descripcion:** Endpoint para eliminar usuario, esto tambien debe contemplar la eliminacion encascada hacia `User_Role`.
 * **Headers:**
-    "Authorization" : Bearer {JWT_TOKEN}
+"Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": Obligatorio razon de la eliminacion.
 * **Request body:**
     EMPTY
 * **Query parameters:**
@@ -615,15 +635,23 @@ SaleDetail(
         - Si no es `SUPER_ADMIN`, enviar mensaje de error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
     2. Validar que el usuario autenticado y el `user_id` sean diferentes(un usuario `SUPER_ADMIN` no puede eliminarse a si mismo).
         - Si no es, enviar mensaje de error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
-    3. Validar que el usuario a eliminar exista
+    3. Validar que la razon este incluida y que sea menor de 100 caracteres.
+        - Si no, responder con error `400 Bad Request` definido en `Estructuras de Respuesta Comunes`.
+            - si no existe: `[ { "field": "X-Audit-Reason", "issue": "Header is required for delete operations" } ]`.
+            - si excede la longitud: `[ { "field": "X-Audit-Reason", "issue": "Reason must be 100 characters or less" } ]`.
+    4. Validar que el usuario a eliminar exista
         - Si no existe enviar mensaje de error `404 Not found` definido en `Request response`.
-    4. Hacer eliminacion de usuario en base de datos usando `soft delete`.
-    5. Buscar y hacer `soft delete` de `User_Role`.
-    6. Enviar mensaje `200 Successfull` definido en `Request response`.
+    5. Iniciar transaction db.
+    6. Hacer eliminacion de usuario en base de datos usando `soft delete`.
+    7. Buscar y hacer `soft delete` de `User_Role`.
+    8. Crear objeto de Audit_Log(action=DELETE, user_id=id, auditor_id=jwt_id, reason=header_reason).
+    10. Hacer commit de transaction.
+    11. Enviar mensaje `200 Successfull` definido en `Request response`.
 #### `POST /api/auth/role`
 * **Descripcion:** Endpoint para la creacion de roles, esto solo lo puede realizar un `SUPER_ADMIN` y debe estar a la par con nuevos requerimientos al codigo para andir lasresponsavilidadesdel   rol nuevo.
 * **Headers:**
-    "Authorization" : Bearer {JWT_TOKEN}
+"Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la creacion.
 * **Request body:**
         ```json
         {
@@ -666,8 +694,11 @@ SaleDetail(
         - Si no responder con mensaje de error `403 Forbiden` definido en `Estructuras de Respuesta Comunes`.
     2. Validar si el `name` es unico haciendo uso de una consulta como `SELECT * FORM ROLE WHERE NAME = 'name'`
         - Si existe responer con mensaje de error `409 Conflict` definido en `Request response`.
-    3. Guardar nuevo rol en base de datos.
-    4. Responder con mensaje `201 Successfull` definido en `Request response`.
+    3. Iniciar transaction db.
+    4. Guardar nuevo rol en base de datos.
+    5. Crear registro en Audit_Log(action=CREATE, role_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    6. Hacer commit de la transaccion.
+    7. Responder con mensaje `201 Successfull` definido en `Request response`.
 #### `GET /api/role`
 * **Descripcion:** Endpoint para listar todos los roles en la base de datos, solo accesible por un `ADMIN` o `SUPER_ADMIN`.
 * **Headers:**
@@ -760,13 +791,14 @@ EMPTY
 * **Descripcion:** Endpoint para editar un role especifico con el `role_id` proporcionado en path variables y con los nuevos datos en Request body.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la actualización.
 * **Request body:**
-```json
-{
-    "name": "string",
-    "description":"string"
-}
-```
+    ```json
+    {
+        "name": "string",
+        "description":"string"
+    }
+    ```
 * **Query parameters:**
 EMPTY
 * **Path variable:**
@@ -815,12 +847,16 @@ EMPTY
         - Si son esos, responder con error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
     4. Validar si el `name` del rol ya existe en la bd (SELECT ... WHERE name = ? AND id != ?)
         - Si existe, responder con error `409 Conflict` definido en `Request response`.
-    5. Si el rol existe actualizar el objeto obtenido con los valores que vienen en el request body.
-    6. Responder con objeto actualizado usando `200 Successfull` definido en `Request response`.
+    5. Iniciar transaction db.
+    6. Si el rol existe actualizar el objeto obtenido con los valores que vienen en el request body.
+    7. Crear registro de Audit_Log(action=UPDATE, role_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    8. Hacer commit de transaccion.
+    9. Responder con objeto actualizado usando `200 Successfull` definido en `Request response`.
 #### `DELETE /api/role/{role_id}`
 * **Descripcion:** Endpoint para eliminar rol especifico mediante el path variable `role_id`
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": Obligatorio razon de la eliminacion.
 * **Request body:**
 EMPTY
 * **Query parameters:**
@@ -864,8 +900,15 @@ EMPTY
         - Si si lo son, enviar mesanje de error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
     4. Validar si el role no esta asignado a ningun usuario en la entidad `User_Role`.
         - Si si, responder con error `409 Conflict` definido en `Request response`.
-    5. Si si, eliminarlo(haciendo uso de softdelete).
-    6. Mandar mensaje `200 Successfully` definido en `Request response`.
+    5. Validar que la razon este incluida y que sea menor de 100 caracteres.
+        - Si no, responder con error `400 Bad Request` definido en `Estructuras de Respuesta Comunes`.
+            - si no existe: `[ { "field": "X-Audit-Reason", "issue": "Header is required for delete operations" } ]`.
+            - si excede la longitud: `[ { "field": "X-Audit-Reason", "issue": "Reason must be 100 characters or less" } ]`.
+    6. Iniciar transaction db.
+    7. Eliminarlo(haciendo uso de softdelete).
+    8. Crear objeto de Audit_Log(action=DELETE, role_id=id, auditor_id=jwt_id, reason=header_reason).
+    9. Hacer commit de transaccion.
+    10. Mandar mensaje `200 Successfully` definido en `Request response`.
 
 #### Modulo de Inventario y producto (categoria, proveedor)
 #### `GET /api/product`
@@ -1010,6 +1053,7 @@ EMPTY
 * **Descripcion:** Endpoint para anadir un producto a la base de datos.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la actualización.
 * **Request body:**
     ```json
     {
@@ -1093,12 +1137,16 @@ EMPTY
         - Si no,  responder con error `404 Not Found supplier` definido en `Request response`.
     4. Validar si los `category_id` existe en la base de datos.
         - Si no,  responder con error `404 Not Found category` definido en `Request response`.
-    5. Crear nuevo producto en base de datos.
-    6. Responder con el nuevo producto creado con `201 Created` definido  en `Request response`.
+    5. Iniciar transaction db.
+    6. Crear nuevo producto en base de datos.
+    7. Crear registro en Audit_Log(action=CREATE, product_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    8. Hacer commit de la transaccion.
+    9. Responder con el nuevo producto creado con `201 Created` definido  en `Request response`.
 #### `PUT /api/product/{product_id}`
 * **Descripcion:** Endpoint para editar datos de un porducto especifico con el `product_id` proporcionado en path variables.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la actualización.
 * **Request body:**
     ```json
     {
@@ -1180,12 +1228,16 @@ EMPTY
         - Si no, responder con error `404 Not found supplier` definido en `Request response`.
     4. Validar si el `category_id` existe en la base de datos.
         - Si no, responder con error `404 Not found category` definido en `Request response`.
-    5. Actualizar objeto obtenido de consulta anterior y guardarlo con los datos editados.
-    6. Responder con mensaje `200 Successfull` definido en `Request response`.
+    5. Iniciar transaction db.
+    6. Actualizar objeto obtenido de consulta anterior y guardarlo con los datos editados.
+    7. Crear objeto de Audit_Log(action=UPDATE, product_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    8. Hacer commit de transaction.
+    9. Responder con mensaje `200 Successfull` definido en `Request response`.
 #### `POST /api/product/{product_id}/activate`
 * **Descripcion:** Endpoint especifico para activar productos, esta accion solo la puede realizar un `ADMIN` o `SUPER_ADMIN` por ahora.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) razon de la activacion.
 * **Request body:**
 EMPTY
 * **Query parameters:**
@@ -1217,12 +1269,16 @@ EMPTY
         Si no, responder con error `404 Not found` definido en `Request response`.
     3. Validar que el producto no este `activo` con `is_active=true`
         - Si si esta, responder con `200 Successfull` definido en `Request response`.
-    4. Editar el valor de `is_active` a `true` en el objeto y guardarlo.
-    5. Responder con `200 Successfull` definido en `Request response`.
+    4. Iniciar transaction db.
+    5. Editar el valor de `is_active` a `true` en el objeto y guardarlo.
+    6. Crear objeto de Audit_Log(action=UPDATE, product_id=id, auditor_id=jwt_id, reason=header_reason_si_existe/default=Product activated).
+    7. Hacer commit de la transaccion.
+    8. Responder con `200 Successfull` definido en `Request response`.
 #### `POST /api/product/{product_id}/deactivate`
 * **Descripcion:** Endpoint especifico para desactivar productos, esta accion solo la puede realizar un `ADMIN` o `SUPER_ADMIN` por ahora.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) razon de la desactivacion.
 * **Request body:**
 EMPTY
 * **Query parameters:**
@@ -1254,12 +1310,16 @@ EMPTY
         Si no, responder con error `404 Not found` definido en `Request response`.
     3. Validar que el producto no este `desactivado` con `is_active=false`
         - Si si esta, responder con `200 Successfull` definido en `Request response`.
-    4. Editar el valor de `is_active` a `false` en el objeto y guardarlo.
-    5. Responder con `200 Successfull` definido en `Request response`.
+    4. Iniciar transaction db.
+    5. Editar el valor de `is_active` a `false` en el objeto y guardarlo.
+    6. Crear objeto de Audit_Log(action=UPDATE, product_id=id, auditor_id=jwt_id, reason=header_reason_si_existe/default=Product deactivated).
+    7. Hacer commit de la transaccion.
+    8. Responder con `200 Successfull` definido en `Request response`.
 #### `DELETE /api/product/{product_id}`
 * **Descripcion:** Endpoint para eliminar un producto en especifico con el `product_id` proporcionado, esta accion solo la puede hacer un `ADMIN` o `SUPER_ADMIN`
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": Obligatorio razon de la eliminacion.
 * **Request body:**
 EMPTY
 * **Query parameters:**
@@ -1289,7 +1349,15 @@ EMPTY
         - Si no, responder con error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
     2. Validar que producto exista y que no este "eliminado" con `deleted_at!=null` en la base de datos.
         - Si no, responder con error `404 Not found` definido en `Request response`.
-    3. "Eliminar" producto de base de datos y responder con mensaje `200 Successfull` definido en `Request response`.
+    3. Validar que la razon este incluida y que sea menor de 100 caracteres.
+        - Si no, responder con error `400 Bad Request` definido en `Estructuras de Respuesta Comunes`.
+            - si no existe: `[ { "field": "X-Audit-Reason", "issue": "Header is required for delete operations" } ]`.
+            - si excede la longitud: `[ { "field": "X-Audit-Reason", "issue": "Reason must be 100 characters or less" } ]`.
+    4. Iniciar transaction db.
+    5. "Eliminar" producto de base de datos.
+    6. Crear objeto de Audit_Log(action=DELETE, product_id=id, auditor_id=jwt_id, reason=header_reason).
+    7. Hacer commit de transaction.
+    8. Responder con mensaje `200 Successfull` definido en `Request response`.
 #### `POST /api/product/{product_id}/stock`
 * **Descripcion:** Endpoint para editar el stock de un producto especifico mediante `product_id`, esta accion debe ocurrir en casos excepcionales donde se requeria modificar el stock de un producto sin generar una venta, este servicio solo puede ser usado por usuarios con rol `ADMIN` o `SUPER_ADMIN` por ahora.
 * **Headers:**
@@ -1444,6 +1512,7 @@ EMPTY
 * **Descripcion:** Endpoint para anadir un supplier nuevo a la base de datos.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la creación.
 * **Request body:**
     ```json
     {
@@ -1491,12 +1560,16 @@ EMPTY
         - Si no, responder con error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
     2. Validar si supplier no existe en base de datos utilizando el identificador `name`
         - Si existe responde con error `409 Conflict` definido en `Request response`.
-    3. Crear nuevo supplier en la base de datos.
-    4. Responder con mensaje `201 Created` definido en `Request response`.
+    3. Iniciar transaction db.
+    4. Crear nuevo supplier en la base de datos.
+    5. Crear registro en Audit_Log(action=CREATE, supplier_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    6. Hacer commit de la transaccion.
+    7. Responder con mensaje `201 Created` definido en `Request response`.
 #### `PUT /api/supplier/{supplier_id}`
 * **Descripcion:** Endpoint para editar datos de un supplier especifico con el `supplier_id` proporcionado en path variables.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la actualización.
 * **Request body:**
     ```json
     {
@@ -1554,12 +1627,16 @@ EMPTY
         - Si no, responder con error `404 Not found` definido en `Request response`.
     3. Validar si el nuevo `name` especificado en `Request body` existe en la base de datos (`SELECT * FROM supplier WHERE name = ? AND id != ?`).
         - Si si existe, responder con error `409 Conflict` definido en `Request response`.
-    4. Actualizar objeto obtenido de consulta anterior y guardarlo con los datos editados.
-    5. Responder con mensaje `200 Successfull` definido en `Request response`.
+    4. Iniciar transaction db.
+    5. Actualizar objeto obtenido de consulta anterior y guardarlo con los datos editados.
+    6. Crear objeto de Audit_Log(action=UPDATE, supplier_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    7. Hacer commit de transaction.
+    8. Responder con mensaje `200 Successfull` definido en `Request response`.
 #### `DELETE /api/supplier/{supplier_id}`
 * **Descripcion:** Endpoint para eliminar un supplier en especifico con el `supplier_id` proporcionado, esta accion solo la puede hacer un `ADMIN` o `SUPER_ADMIN`
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": Obligatorio razon de la eliminacion.
 * **Request body:**
 EMPTY
 * **Query parameters:**
@@ -1589,7 +1666,15 @@ EMPTY
         - Si no, responder con error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
     2. Validar que supplier exista y que no este "eliminado" con `deleted_at!=null` en la base de datos.
         - Si no, responder con error `404 Not found` definido en `Request response`.
-    3. "Eliminar" supplier de base de datos y responder con mensaje `200 Successfull` definido en `Request response`.
+    3. Validar que la razon este incluida y que sea menor de 100 caracteres.
+        - Si no, responder con error `400 Bad Request` definido en `Estructuras de Respuesta Comunes`.
+            - si no existe: `[ { "field": "X-Audit-Reason", "issue": "Header is required for delete operations" } ]`.
+            - si excede la longitud: `[ { "field": "X-Audit-Reason", "issue": "Reason must be 100 characters or less" } ]`.
+    4. Iniciar transaction db.
+    5. "Eliminar" supplier de base de datos.
+    6. Crear objeto de Audit_Log(action=DELETE, supplier_id=id, auditor_id=jwt_id, reason=header_reason).
+    7. Hacer commit de transaction.
+    8. responder con mensaje `200 Successfull` definido en `Request response`.
 
 #### **CATEGORY**
 #### `GET /api/category`
@@ -1691,6 +1776,7 @@ EMPTY
 * **Descripcion:** Endpoint para anadir un category nuevo a la base de datos.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la creación.
 * **Request body:**
     ```json
     {
@@ -1732,12 +1818,16 @@ EMPTY
         - Si no, responder con error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
     2. Validar si category no existe en base de datos utilizando el identificador `name`
         - Si existe responde con error `409 Conflict` definido en `Request response`.
-    3. Crear nuevo category en la base de datos.
-    4. Responder con mensaje `201 Created` definido en `Request response`.
+    3. Iniciar transaction db.
+    4. Crear nueva category.
+    5. Crear registro en Audit_Log(action=CREATE, category_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    6. Hacer commit de la transaction.
+    7. Responder con mensaje `201 Created` definido en `Request response`.
 #### `PUT /api/category/{category_id}`
 * **Descripcion:** Endpoint para editar datos de un category especifico con el `category_id` proporcionado en path variables.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la actualización.
 * **Request body:**
     ```json
     {
@@ -1789,12 +1879,16 @@ EMPTY
         - Si no, responder con error `404 Not found` definido en `Request response`.
     3. Validar si el nuevo `name` especificado en `Request body` existe en la base de datos (`SELECT * FROM category WHERE name = ? AND id != ?`).
         - Si si existe, responder con error `409 Conflict` definido en `Request response`.
-    4. Actualizar objeto obtenido de consulta anterior y guardarlo con los datos editados.
-    5. Responder con mensaje `200 Successfull` definido en `Request response`.
+    4. Iniciar transaction db.
+    5. Actualizar objeto obtenido de consulta anterior y guardarlo con los datos editados.
+    6. Crear objeto de Audit_Log(action=UPDATE, category_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    7. Hacer commit de transaction.
+    8. Responder con mensaje `200 Successfull` definido en `Request response`.
 #### `DELETE /api/category/{category_id}`
 * **Descripcion:** Endpoint para eliminar un category en especifico con el `category_id` proporcionado, esta accion solo la puede hacer un `ADMIN` o `SUPER_ADMIN`
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": Obligatorio razon de la eliminacion.
 * **Request body:**
 EMPTY
 * **Query parameters:**
@@ -1832,8 +1926,16 @@ EMPTY
     2. Validar que category exista y que no este "eliminado" con `deleted_at!=null` en la base de datos.
         - Si no, responder con error `404 Not found` definido en `Request response`.
     3. Validar si category no esta asignado en productos.
-        - Si si esta, responder con erro `409 Conflict` definido en `Request response`.
-    4. "Eliminar" category de base de datos y responder con mensaje `200 Successfull` definido en `Request response`.
+        - Si si esta, responder con error `409 Conflict` definido en `Request response`.
+    4. Validar que la razon este incluida y que sea menor de 100 caracteres.
+        - Si no, responder con error `400 Bad Request` definido en `Estructuras de Respuesta Comunes`.
+            - si no existe: `[ { "field": "X-Audit-Reason", "issue": "Header is required for delete operations" } ]`.
+            - si excede la longitud: `[ { "field": "X-Audit-Reason", "issue": "Reason must be 100 characters or less" } ]`.
+    5. Iniciar transaction db.
+    6. "Eliminar" category de base de datos.
+    7. Crear objeto de Audit_Log(action=DELETE, category_id=id, auditor_id=jwt_id, reason=header_reason).
+    8. Hacer commit de transaction.
+    9. responder con mensaje `200 Successfull` definido en `Request response`.
 
 #### Modulo de Transacciones y Ventas
 #### `POST /api/sale`
@@ -2251,6 +2353,7 @@ EMPTY
     - `CREATE UNIQUE INDEX unique_name_active ON category (name) WHERE deleted_at IS NULL;`
 ### Puntos importantes
 - Si se usa un filtro cualquiera que sea busqueda unica responder con error 404
+- Se implementará una entidad de auditoría `Audit_Log` para llevar un registro de las acciones comunes en la base de datos(CREACIÓN, ACTUALIZACIÓN, ELIMINACIÓN) centralizad para complementar el `SoftDelete`.
 
 NUMERIC(12, 2) se traduce a BigDecimal en java
 ### Out of scope
