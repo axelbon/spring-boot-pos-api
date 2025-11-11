@@ -298,7 +298,8 @@ Audit_Log(
 #### `POST /api/auth/register`
 * **Descripcion:** Endpoint para el registro de usuarios nuevos con un "Super user" con rol `SUPER_ADMIN`.
 * **Headers:**
-    "Authorization" : Bearer {JWT_TOKEN}
+"Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la actualización.
 * **Request body:**
         ```json
         {
@@ -371,8 +372,9 @@ Audit_Log(
     8. Crear objeto de usuario
     9. Crear objeto de User_Role
     10. Guardar usuario y User_Role en DB
-    11. `COMMIT` transaction DB.
-    12. Devolver mensaje de usuario creado `201 Exito` definido en `Request response`.
+    11. Crear objeto de Audit_Log(action=CREATE, user_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    12. `COMMIT` transaction DB.
+    13. Devolver mensaje de usuario creado `201 Exito` definido en `Request response`.
 #### `POST /api/auth/login`
 * **Descripcion:** Endpoint para el inicio de sesion de los usuarios.
 * **Request body:**
@@ -516,6 +518,7 @@ Audit_Log(
 * **Descripcion:** Endpoint para editar datos de un usuario especifico con el `user_id` proporcionado en path variables, un usuario puede editar sus datos `nombe`, `email` y `password`. Pero un `SUPER_ADMIN` puede cambiar todo eso incluyendo el `role_id` en la entidad `User_Role`.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la actualización.
 * **Request body:**
     * **Body de `SUPER_ADMIN`**
     ```json
@@ -581,22 +584,25 @@ Audit_Log(
             * `password`: no debe ser vacio, debe tener 8 caracteres minimo, debe tener 1 caracter especial minimo, debe tener 1 numero minimo, debe tener 1 mayuscula minimo.
             * `role_id`: no debe ser vacio(esta bien no incluirlo), debe ser numero entero
 * **Funcionamiento:**
-        - validaciones de dto
-            - Si hay un problema enviar error `Ejemplo: Input validation error` definido en `Request response`.
-        1. Validar que el usuario autenticado sea el mismo que el `user_id` en los Path variables.
-        2. Validar si el usuario autenticado no es el mismo validar que sea un `ADMIN` o `SUPER_ADMIN`, si no, enviar error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
-        3. Validar si el usuario existe en la base de datos. Si no, enviar error `404 Not found` definido en `Request response`.
-        4. Validar si el usuario autenticado es `ADMIN` validar que el usuario a editar no sea un `SUPER_ADMIN`, si no, enviar error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
-        5. Si el Request body incluye `role_id` validar que el usuario sea `SUPER_ADMIN`, si no, enviar error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
-        6. Validar si el email incluid en request body no existe en la base de datos con una consulta como esta `SELECT * FROM users WHERE email = ? AND id != ?`.
-        7. Si la validacion de email es positiva(si existe), enviar error `409 Conflict` definido en `Request response`.
-        8. Construir nuevo objeto de usuario con los valores nuevo.
-        9. Guardar usuario editado en la base de datos.
-        10. Responde con mesaje `200 Successfull` definido en `Request response`
+    - validaciones de dto
+        - Si hay un problema enviar error `Ejemplo: Input validation error` definido en `Request response`.
+    1. Validar que el usuario autenticado sea el mismo que el `user_id` en los Path variables.
+    2. Validar si el usuario autenticado no es el mismo validar que sea un `ADMIN` o `SUPER_ADMIN`, si no, enviar error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
+    3. Validar si el usuario existe en la base de datos. Si no, enviar error `404 Not found` definido en `Request response`.
+    4. Validar si el usuario autenticado es `ADMIN` validar que el usuario a editar no sea un `SUPER_ADMIN`, si no, enviar error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
+    5. Si el Request body incluye `role_id` validar que el usuario sea `SUPER_ADMIN`, si no, enviar error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
+    6. Validar si el email incluid en request body no existe en la base de datos con una consulta como esta `SELECT * FROM users WHERE email = ? AND id != ?`.
+    7. Si la validacion de email es positiva(si existe), enviar error `409 Conflict` definido en `Request response`.
+    8. Construir nuevo objeto de usuario con los valores nuevo.
+    9. Iniciar transaction db.
+    10. Guardar usuario editado en la base de datos.
+    11. Crear objeto de Audit_Log(action=UPDATE, user_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    10. Responde con mesaje `200 Successfull` definido en `Request response`
 #### `DELETE /api/user/{user_id}`
 * **Descripcion:** Endpoint para eliminar usuario, esto tambien debe contemplar la eliminacion encascada hacia `User_Role`.
 * **Headers:**
-    "Authorization" : Bearer {JWT_TOKEN}
+"Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": Obligatorio razon de la eliminacion.
 * **Request body:**
     EMPTY
 * **Query parameters:**
@@ -629,11 +635,18 @@ Audit_Log(
         - Si no es `SUPER_ADMIN`, enviar mensaje de error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
     2. Validar que el usuario autenticado y el `user_id` sean diferentes(un usuario `SUPER_ADMIN` no puede eliminarse a si mismo).
         - Si no es, enviar mensaje de error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
-    3. Validar que el usuario a eliminar exista
+    3. Validar que la razon este incluida y que sea menor de 100 caracteres.
+        - Si no, responder con error `400 Bad Request` definido en `Estructuras de Respuesta Comunes`.
+            - si no existe: `[ { "field": "X-Audit-Reason", "issue": "Header is required for delete operations" } ]`.
+            - si excede la longitud: `[ { "field": "X-Audit-Reason", "issue": "Reason must be 100 characters or less" } ]`.
+    4. Validar que el usuario a eliminar exista
         - Si no existe enviar mensaje de error `404 Not found` definido en `Request response`.
-    4. Hacer eliminacion de usuario en base de datos usando `soft delete`.
-    5. Buscar y hacer `soft delete` de `User_Role`.
-    6. Enviar mensaje `200 Successfull` definido en `Request response`.
+    5. Iniciar transaction db.
+    6. Hacer eliminacion de usuario en base de datos usando `soft delete`.
+    7. Buscar y hacer `soft delete` de `User_Role`.
+    8. Crear objeto de Audit_Log(action=DELETE, user_id=id, auditor_id=jwt_id, reason=header_reason).
+    10. Hacer commit de transaction.
+    11. Enviar mensaje `200 Successfull` definido en `Request response`.
 #### `POST /api/auth/role`
 * **Descripcion:** Endpoint para la creacion de roles, esto solo lo puede realizar un `SUPER_ADMIN` y debe estar a la par con nuevos requerimientos al codigo para andir lasresponsavilidadesdel   rol nuevo.
 * **Headers:**
