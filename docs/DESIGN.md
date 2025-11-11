@@ -1024,6 +1024,7 @@ EMPTY
 * **Descripcion:** Endpoint para anadir un producto a la base de datos.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la actualización.
 * **Request body:**
     ```json
     {
@@ -1107,12 +1108,16 @@ EMPTY
         - Si no,  responder con error `404 Not Found supplier` definido en `Request response`.
     4. Validar si los `category_id` existe en la base de datos.
         - Si no,  responder con error `404 Not Found category` definido en `Request response`.
-    5. Crear nuevo producto en base de datos.
-    6. Responder con el nuevo producto creado con `201 Created` definido  en `Request response`.
+    5. Iniciar transaction db.
+    6. Crear nuevo producto en base de datos.
+    7. Crear registro en Audit_Log(action=CREATE, product_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    8. Hacer commit de la transaccion.
+    9. Responder con el nuevo producto creado con `201 Created` definido  en `Request response`.
 #### `PUT /api/product/{product_id}`
 * **Descripcion:** Endpoint para editar datos de un porducto especifico con el `product_id` proporcionado en path variables.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) Razón para la actualización.
 * **Request body:**
     ```json
     {
@@ -1194,12 +1199,16 @@ EMPTY
         - Si no, responder con error `404 Not found supplier` definido en `Request response`.
     4. Validar si el `category_id` existe en la base de datos.
         - Si no, responder con error `404 Not found category` definido en `Request response`.
-    5. Actualizar objeto obtenido de consulta anterior y guardarlo con los datos editados.
-    6. Responder con mensaje `200 Successfull` definido en `Request response`.
+    5. Iniciar transaction db.
+    6. Actualizar objeto obtenido de consulta anterior y guardarlo con los datos editados.
+    7. Crear objeto de Audit_Log(action=UPDATE, product_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
+    8. Hacer commit de transaction.
+    9. Responder con mensaje `200 Successfull` definido en `Request response`.
 #### `POST /api/product/{product_id}/activate`
 * **Descripcion:** Endpoint especifico para activar productos, esta accion solo la puede realizar un `ADMIN` o `SUPER_ADMIN` por ahora.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) razon de la activacion.
 * **Request body:**
 EMPTY
 * **Query parameters:**
@@ -1231,12 +1240,16 @@ EMPTY
         Si no, responder con error `404 Not found` definido en `Request response`.
     3. Validar que el producto no este `activo` con `is_active=true`
         - Si si esta, responder con `200 Successfull` definido en `Request response`.
-    4. Editar el valor de `is_active` a `true` en el objeto y guardarlo.
-    5. Responder con `200 Successfull` definido en `Request response`.
+    4. Iniciar transaction db.
+    5. Editar el valor de `is_active` a `true` en el objeto y guardarlo.
+    6. Crear objeto de Audit_Log(action=UPDATE, product_id=id, auditor_id=jwt_id, reason=header_reason_si_existe/default=Product activated).
+    7. Hacer commit de la transaccion.
+    8. Responder con `200 Successfull` definido en `Request response`.
 #### `POST /api/product/{product_id}/deactivate`
 * **Descripcion:** Endpoint especifico para desactivar productos, esta accion solo la puede realizar un `ADMIN` o `SUPER_ADMIN` por ahora.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": (Opcional) razon de la desactivacion.
 * **Request body:**
 EMPTY
 * **Query parameters:**
@@ -1268,12 +1281,16 @@ EMPTY
         Si no, responder con error `404 Not found` definido en `Request response`.
     3. Validar que el producto no este `desactivado` con `is_active=false`
         - Si si esta, responder con `200 Successfull` definido en `Request response`.
-    4. Editar el valor de `is_active` a `false` en el objeto y guardarlo.
-    5. Responder con `200 Successfull` definido en `Request response`.
+    4. Iniciar transaction db.
+    5. Editar el valor de `is_active` a `false` en el objeto y guardarlo.
+    6. Crear objeto de Audit_Log(action=UPDATE, product_id=id, auditor_id=jwt_id, reason=header_reason_si_existe/default=Product deactivated).
+    7. Hacer commit de la transaccion.
+    8. Responder con `200 Successfull` definido en `Request response`.
 #### `DELETE /api/product/{product_id}`
 * **Descripcion:** Endpoint para eliminar un producto en especifico con el `product_id` proporcionado, esta accion solo la puede hacer un `ADMIN` o `SUPER_ADMIN`
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
+"X-AUDIT-REASON": Obligatorio razon de la eliminacion.
 * **Request body:**
 EMPTY
 * **Query parameters:**
@@ -1303,7 +1320,15 @@ EMPTY
         - Si no, responder con error `403 Forbidden` definido en `Estructuras de Respuesta Comunes`.
     2. Validar que producto exista y que no este "eliminado" con `deleted_at!=null` en la base de datos.
         - Si no, responder con error `404 Not found` definido en `Request response`.
-    3. "Eliminar" producto de base de datos y responder con mensaje `200 Successfull` definido en `Request response`.
+    3. Validar que la razon este incluida y que sea menor de 100 caracteres.
+        - Si no, responder con error `400 Bad Request` definido en `Estructuras de Respuesta Comunes`.
+            - si no existe: `[ { "field": "X-Audit-Reason", "issue": "Header is required for delete operations" } ]`.
+            - si excede la longitud: `[ { "field": "X-Audit-Reason", "issue": "Reason must be 100 characters or less" } ]`.
+    4. Iniciar transaction db.
+    5. "Eliminar" producto de base de datos.
+    6. Crear objeto de Audit_Log(action=DELETE, product_id=id, auditor_id=jwt_id, reason=header_reason).
+    7. Hacer commit de transaction.
+    8. Responder con mensaje `200 Successfull` definido en `Request response`.
 #### `POST /api/product/{product_id}/stock`
 * **Descripcion:** Endpoint para editar el stock de un producto especifico mediante `product_id`, esta accion debe ocurrir en casos excepcionales donde se requeria modificar el stock de un producto sin generar una venta, este servicio solo puede ser usado por usuarios con rol `ADMIN` o `SUPER_ADMIN` por ahora.
 * **Headers:**
