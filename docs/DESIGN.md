@@ -1705,7 +1705,7 @@ EMPTY
 * **Descripcion:** Endpoint para anadir un category nuevo a la base de datos.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
-"X-AUDIT-REASON": ""
+"X-AUDIT-REASON": (Opcional) Razón para la creación.
 * **Request body:**
     ```json
     {
@@ -1749,14 +1749,14 @@ EMPTY
         - Si existe responde con error `409 Conflict` definido en `Request response`.
     3. Iniciar transaction db.
     4. Crear nueva category.
-    5. Crear registro en Audit_Log(action=CREATE, category_id=id, auditor_id=jwt_id, reason=reason_header).
+    5. Crear registro en Audit_Log(action=CREATE, category_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
     6. Hacer commit de la transaction.
     7. Responder con mensaje `201 Created` definido en `Request response`.
 #### `PUT /api/category/{category_id}`
 * **Descripcion:** Endpoint para editar datos de un category especifico con el `category_id` proporcionado en path variables.
 * **Headers:**
 "Authorization" : Bearer {JWT_TOKEN}
-"X-AUDIT-REASON": ""
+"X-AUDIT-REASON": (Opcional) Razón para la actualización.
 * **Request body:**
     ```json
     {
@@ -1810,7 +1810,7 @@ EMPTY
         - Si si existe, responder con error `409 Conflict` definido en `Request response`.
     4. Iniciar transaction db.
     5. Actualizar objeto obtenido de consulta anterior y guardarlo con los datos editados.
-    6. Crear objeto de Audit_Log(action=UPDATE, category_id=id, auditor_id=jwt_id, reason=reason_header).
+    6. Crear objeto de Audit_Log(action=UPDATE, category_id=id, auditor_id=jwt_id, reason=header_reason_si_existe).
     7. Hacer commit de transaction.
     8. Responder con mensaje `200 Successfull` definido en `Request response`.
 #### `DELETE /api/category/{category_id}`
